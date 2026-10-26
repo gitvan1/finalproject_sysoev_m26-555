@@ -1,0 +1,34 @@
+[project]
+name = "valutatrade_hub"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "gitvan", email = "ivan076nt@mail.ru" }
+]
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+valutatrade_hub = "main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["valutatrade_hub", "main.py"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+exclude = ["venv", ".venv", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = [] 
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.2",
+]
