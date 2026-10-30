@@ -1,5 +1,8 @@
 import hashlib
+import os
 from datetime import datetime
+
+from .constants import DEFAULT_RATES, META_KEYS
 
 
 class User:
@@ -10,13 +13,15 @@ class User:
         user_id: int,
         username: str,
         hashed_password: str = "",
-        salt: str = "",
+        salt: str | None = None,
         registration_date: datetime | None = None,
     ):
         # Приватные атрибуты
-        self._user_id = user_id
-        self._username = username
-        self._salt = salt
+        self._user_id = 0
+        self.user_id = user_id
+        self._username = ""
+        self.username = username
+        self._salt = os.urandom(16).hex() if salt is None else salt
         self._hashed_password = hashed_password
         self._registration_date = registration_date or datetime.now()
 
@@ -87,6 +92,29 @@ class User:
         ).hexdigest()
         return candidate == self._hashed_password
     
+    @classmethod
+    def from_dict(cls, data: dict) -> "User":
+        return cls(
+            user_id=data["user_id"],
+            username=data["username"],
+            hashed_password=data.get("hashed_password", ""),
+            salt=data.get("salt"),
+            registration_date=(
+                datetime.fromisoformat(data["registration_date"])
+                if data.get("registration_date") else None
+            ),
+        )
+    
+    def to_dict(self) -> dict:
+        """Представление в dict"""
+        return {
+            "user_id": self._user_id,
+            "username": self._username,
+            "hashed_password": self._hashed_password,
+            "salt": self._salt,
+            "registration_date": self._registration_date.isoformat(),
+        }
+    
 class Wallet:
     """Кошелёк пользователя для одной конкретной валюты"""
 
@@ -101,7 +129,6 @@ class Wallet:
         self.balance = balance  
 
     # ГЕТТЕРЫ / СЕТТЕРЫ
-
     @property
     def currency_code(self) -> str:
         return self._currency_code
@@ -148,6 +175,13 @@ class Wallet:
         }
         print(f"{info['currency_code']}: {info['balance']}")
         return info
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "Wallet":
+        return cls(
+            currency_code=data["currency_code"],
+            balance=data.get("balance", 0.0),
+        )
 
     # Служебные методы
     @staticmethod
@@ -161,19 +195,11 @@ class Wallet:
 class Portfolio:
     """Управление всеми кошельками одного пользователя"""
 
-    # Фиксированные курсы
-    _DEFAULT_RATES: dict[str, float] = {
-        "USD": 1.0,
-        "EUR": 1.08,
-        "BTC": 65000.0,
-        "ETH": 3200.0,
-    }
-
     def __init__(
         self, 
         user_id: int,
-        wallets: dict[str, "Wallet"] | None = None,
-        user: "User" | None = None
+        wallets: dict[str, Wallet] | None = None,
+        user: User | None = None
     ):
         
         self._user_id = user_id
@@ -182,7 +208,7 @@ class Portfolio:
 
     # ГЕТТЕРЫ
     @property
-    def wallets(self) -> dict[str, "Wallet"]:
+    def wallets(self) -> dict[str, Wallet]:
         return dict(self._wallets)
 
     @property
@@ -190,12 +216,12 @@ class Portfolio:
         return self._user_id
     
     @property
-    def user(self) -> "User | None":
+    def user(self) -> User | None:
         """Объект пользователя"""
         return self._user
 
     # Публичные методы
-    def add_currency(self, currency_code: str) -> "Wallet":
+    def add_currency(self, currency_code: str) -> Wallet:
         """Добавляет новый кошелёк (код валюты должен быть уникален)."""
         if not isinstance(currency_code, str) or not currency_code.strip():
             raise ValueError("Код валюты не может быть пустым")
@@ -211,24 +237,40 @@ class Portfolio:
     def get_total_value(self, base_currency='USD', rates: dict | None = None) -> float:
         """Общая стоимость всех валют в base_currency по фиксированным курсам."""
         base = base_currency.strip().upper()
-        effective_rates = rates if rates is not None else self._DEFAULT_RATES
+        effective_rates = rates if rates is not None else DEFAULT_RATES
 
-        if base not in effective_rates:
+        currencies = {
+            c for k in effective_rates if k not in META_KEYS for c in k.split("_")
+        }
+        if base not in currencies:
             raise ValueError(f"Нет курса для базовой валюты {base}")
-        base_in_usd = effective_rates[base]
         
-        total_usd = 0.0
+        total = 0.0
         for code, wallet in self._wallets.items():
-            if code not in effective_rates:
-                raise ValueError(f"Нет курса для валюты {code}")
-            total_usd += wallet.balance * effective_rates[code]
-        
-        return total_usd / base_in_usd
+            if code == base:
+                total += wallet.balance 
+            else:
+                if f"{code}_{base}" in effective_rates:
+                    total += wallet.balance * effective_rates[f"{code}_{base}"]["rate"]
+                elif f"{base}_{code}" in effective_rates:
+                    total += wallet.balance / effective_rates[f"{base}_{code}"]["rate"]
+                else:
+                    raise ValueError(f"Нет курса для валюты {code}")
+
+        return total
     
-    def get_wallet(self, currency_code: str) -> "Wallet" | None:
+    def get_wallet(self, currency_code: str) -> Wallet | None:
         """Возвращает кошелёк по коду валюты (или None, если нет)."""
         if not isinstance(currency_code, str):
             return None
         return self._wallets.get(currency_code.strip().upper())
+    
+    def to_dict(self) -> dict:
+        return {
+            "user_id": self._user_id,
+            "wallets": {code: {"balance": w.balance} for 
+                        code, w in self._wallets.items()},
+        }
+
 
 
