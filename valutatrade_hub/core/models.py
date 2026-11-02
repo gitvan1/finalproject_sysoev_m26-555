@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 
 from .constants import DEFAULT_RATES, META_KEYS
+from .exceptions import InsufficientFundsError
 
 
 class User:
@@ -161,9 +162,8 @@ class Wallet:
         """Снятие средств."""
         self._validate_amount(amount)
         if float(amount) > self._balance:
-            raise ValueError(
-                f"Недостаточно средств: баланс {self._balance} {self._currency_code}, "
-                f"запрошено {amount}"
+            raise InsufficientFundsError(
+                self._balance, amount, self._currency_code
             )
         self._balance -= float(amount)
 

@@ -9,22 +9,18 @@ from .constants import (
     RATES_FILE,
     USERS_FILE,
 )
+from .currencies import get_currency
+from .exceptions import (
+    ApiRequestError,
+    LoginError,
+    PortfolioError,
+    RateError,
+    RegisterError,
+)
 from .models import Portfolio, User, Wallet
 
 # Текущая сессия
 _current_user: User | None = None
-
-class RegisterError(Exception):
-    """Ошибка бизнес-логики регистрации."""
-
-class LoginError(Exception):
-    """Ошибка бизнес-логики входа."""
-
-class PortfolioError(Exception):
-    """Бизнес-ошибка портфеля"""
-
-class RateError(Exception):
-    """Бизнес-ошибка получения курса."""
 
 def register_user(username: str, password: str) -> User:
     """Регистрирует пользователя и создаёт пустой портфель."""
@@ -234,19 +230,12 @@ def sell_currency(currency_code: str, amount: float) -> dict:
     # Портфель
     portfolio = get_current_portfolio()
 
-    # 5. Кошелёк должен существовать
+    # Кошелёк должен существовать
     wallet = portfolio.get_wallet(code)
     if wallet is None:
         raise PortfolioError(
             f"У вас нет кошелька '{code}'. "
             f"Добавьте валюту: она создаётся автоматически при первой покупке."
-        )
-
-    # Достаточно средств
-    if wallet.balance < amount:
-        raise PortfolioError(
-            f"Недостаточно средств: доступно {wallet.balance} {code}, "
-            f"требуется {amount} {code}"
         )
 
     # Курс
@@ -308,9 +297,14 @@ def _get_rates() -> dict:
     if isinstance(rates, dict) and _rates_fresh(rates):
         return rates
     
-    # Позже будет реализован парсер
-    # Сейчас заглушка
-    prices = DEFAULT_RATES
+    try:
+        # Позже будет реализован парсер
+        # Сейчас заглушка
+        prices = DEFAULT_RATES
+    except ApiRequestError:
+        if isinstance(rates, dict) and any(k not in META_KEYS for k in rates):
+            return rates
+        raise
     return _save_rates(prices)
 
 def get_rate(from_code: str, to_code: str) -> dict:
@@ -323,15 +317,12 @@ def get_rate(from_code: str, to_code: str) -> dict:
     
     frm = from_code.strip().upper()
     to = to_code.strip().upper()
+    # валидация кодов через реестр
+    get_currency(frm)
+    get_currency(to)
 
-    try:
-        rates = _get_rates()
-    except Exception:
-        raise RateError(
-            f"Курс {frm}→{to} недоступен. Повторите попытку позже."
-        )
+    rates = _get_rates()
     
-
     if frm == to:
         to_frm, frm_to = 1.0, 1.0
         updated = rates.get("last_refresh")

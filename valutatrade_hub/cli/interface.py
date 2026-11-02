@@ -1,6 +1,16 @@
 import shlex
 
 import valutatrade_hub.core.usecases as usecases
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+    LoginError,
+    PortfolioError,
+    RateError,
+    RegisterError,
+)
+
 
 # Форматирование
 def _fmt_amount(value: float) -> str:
@@ -100,7 +110,7 @@ def run() -> None:
 
             try:
                 user = usecases.register_user(flags["username"], flags["password"])
-            except usecases.RegisterError as e:
+            except RegisterError as e:
                 print(e)
                 continue
 
@@ -124,7 +134,7 @@ def run() -> None:
 
             try:
                 user = usecases.login_user(flags["username"], flags["password"])
-            except usecases.LoginError as e:
+            except LoginError as e:
                 print(e)
                 continue
 
@@ -146,10 +156,12 @@ def run() -> None:
 
             try:
                 view = usecases.get_portfolio_view(base)
-            except (usecases.LoginError, 
-                    usecases.PortfolioError, 
-                    usecases.RateError) as e:
+            except (LoginError, PortfolioError, RateError) as e:
                 print(e)
+                continue
+            except ApiRequestError as e:
+                print(e)
+                print("Повторите попытку позже или проверьте соединение с сетью.")
                 continue
 
             if not view["lines"]:
@@ -186,10 +198,19 @@ def run() -> None:
 
             try:
                 result = usecases.get_rate(flags["from"], flags["to"])
-            except usecases.RateError as e:
+            except RateError as e:
                 print(e)
                 continue
-
+            except ApiRequestError as e:
+                print(e)
+                print("Повторите попытку позже или проверьте соединение с сетью.")
+                continue
+            except CurrencyNotFoundError as e:
+                print(e)
+                print("Подсказка: get-rate --from <code> --to <code> "
+                      "- курс одной валюты к другой.")
+                continue
+                
             print(
                 f"Курс {result['from']}→{result['to']}: "
                 f"{_fmt_rate(result['rate'])} "
@@ -216,8 +237,12 @@ def run() -> None:
 
             try:
                 result = usecases.buy_currency(flags["currency"], amount)
-            except (usecases.LoginError, ValueError, usecases.PortfolioError) as e:
+            except (LoginError, ValueError, PortfolioError) as e:
                 print(e)
+                continue
+            except ApiRequestError as e:
+                print(e)
+                print("Повторите попытку позже или проверьте соединение с сетью.")
                 continue
 
             code = result["currency_code"]
@@ -251,8 +276,17 @@ def run() -> None:
 
             try:
                 result = usecases.sell_currency(flags["currency"], amount)
-            except (usecases.LoginError, ValueError, usecases.PortfolioError) as e:
+            except (
+                LoginError,
+                ValueError, 
+                PortfolioError, 
+                InsufficientFundsError
+                ) as e:
                 print(e)
+                continue
+            except ApiRequestError as e:
+                print(e)
+                print("Повторите попытку позже или проверьте соединение с сетью.")
                 continue
 
             code = result["currency_code"]
