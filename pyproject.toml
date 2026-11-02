@@ -32,3 +32,14 @@ ignore = []
 dev = [
     "ruff>=0.17.2",
 ]
+
+[tool.valutatrade]
+data_dirv = "data"
+users_file = "users.json"
+portfolios_file = "portfolios.json"
+rates_file = "rates.json"
+rates_ttl_seconds = 300
+base_currency = "USD"
+log_file = "logs/actions.log"
+log_format = "text"
+log_level = "INFO"

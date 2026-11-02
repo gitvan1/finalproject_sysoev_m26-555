@@ -8,6 +8,7 @@ from .constants import (
     PORTFOLIOS_FILE,
     RATES_FILE,
     USERS_FILE,
+    BASE_CURRENCY
 )
 from .currencies import get_currency
 from .exceptions import (
@@ -110,7 +111,7 @@ def get_current_portfolio() -> Portfolio:
     }
     return Portfolio(user_id=user.user_id, wallets=wallets, user=user)
 
-def get_portfolio_view(base_currency: str = "USD") -> dict:
+def get_portfolio_view(base_currency: str = BASE_CURRENCY) -> dict:
     """Готовит данные для show-portfolio"""
     portfolio = get_current_portfolio()
     rates = _get_rates()
@@ -182,9 +183,9 @@ def buy_currency(currency_code: str, amount: float) -> dict:
 
     # Курс
     try:
-        rate = get_rate(currency_code, "USD")["rate"]
+        rate = get_rate(currency_code, BASE_CURRENCY)["rate"]
     except (RateError):
-        raise PortfolioError(f"Не удалось получить курс для {code}→USD")
+        raise PortfolioError(f"Не удалось получить курс для {code}→{BASE_CURRENCY}")
 
     # Изменение портфеля
     wallet = portfolio.get_wallet(code)
@@ -240,9 +241,9 @@ def sell_currency(currency_code: str, amount: float) -> dict:
 
     # Курс
     try:
-        rate = get_rate(currency_code, "USD")["rate"]
+        rate = get_rate(currency_code, BASE_CURRENCY)["rate"]
     except (RateError):
-        raise PortfolioError(f"Не удалось получить курс для {code}→USD")
+        raise PortfolioError(f"Не удалось получить курс для {code}→{BASE_CURRENCY}")
 
     # Изменение портфеля
     balance_before = wallet.balance
@@ -355,3 +356,9 @@ def get_rate(from_code: str, to_code: str) -> dict:
         "updated_at": updated_at,
 
     }
+
+
+# Задание 3.3 синглтонов:
+# Обозначить места использования синглтонов в usecases.py
+# Синглтоны используются в constants.py, 
+# что потом используется в usecases.py
