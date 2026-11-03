@@ -19,10 +19,12 @@ from .exceptions import (
     RegisterError,
 )
 from .models import Portfolio, User, Wallet
+from ..decorators import log_action
 
 # Текущая сессия
 _current_user: User | None = None
 
+@log_action("REGISTER")
 def register_user(username: str, password: str) -> User:
     """Регистрирует пользователя и создаёт пустой портфель."""
     # username
@@ -58,6 +60,7 @@ def register_user(username: str, password: str) -> User:
 
     return user
 
+@log_action("LOGIN")
 def login_user(username: str, password: str) -> User:
     """Вход в систему: ищет пользователя по username и сверяет пароль."""
 
@@ -159,6 +162,7 @@ def _save_portfolio(portfolio: Portfolio) -> None:
         all_portfolios.append(portfolio.to_dict())
     utils.save_json(PORTFOLIOS_FILE, all_portfolios)
 
+@log_action("BUY", verbose=True)
 def buy_currency(currency_code: str, amount: float) -> dict:
     """Покупка валюты: увеличивает баланс кошелька (создаёт, если нет)."""
     # Логин
@@ -208,6 +212,7 @@ def buy_currency(currency_code: str, amount: float) -> dict:
         "total_value": amount * rate,
     }
 
+@log_action("SELL", verbose=True)
 def sell_currency(currency_code: str, amount: float) -> dict:
     """Продажа валюты: уменьшает баланс кошелька"""
 
@@ -308,6 +313,7 @@ def _get_rates() -> dict:
         raise
     return _save_rates(prices)
 
+@log_action("GET_RATE")
 def get_rate(from_code: str, to_code: str) -> dict:
     """Курс from_code → to_code + обратный, с меткой времени."""
 

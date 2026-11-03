@@ -6,3 +6,4 @@
  .cast
  data/
  .pyc
+ logs/

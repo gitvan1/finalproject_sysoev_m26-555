@@ -109,7 +109,8 @@ def run() -> None:
                 continue
 
             try:
-                user = usecases.register_user(flags["username"], flags["password"])
+                user = usecases.register_user(username=flags["username"], 
+                                              password=flags["password"])
             except RegisterError as e:
                 print(e)
                 continue
@@ -133,7 +134,8 @@ def run() -> None:
                 continue
 
             try:
-                user = usecases.login_user(flags["username"], flags["password"])
+                user = usecases.login_user(username=flags["username"], 
+                                           password=flags["password"])
             except LoginError as e:
                 print(e)
                 continue
@@ -155,7 +157,7 @@ def run() -> None:
             base = flags.get("base", "USD")
 
             try:
-                view = usecases.get_portfolio_view(base)
+                view = usecases.get_portfolio_view(base_currency=base)
             except (LoginError, PortfolioError, RateError) as e:
                 print(e)
                 continue
@@ -197,7 +199,8 @@ def run() -> None:
                 continue
 
             try:
-                result = usecases.get_rate(flags["from"], flags["to"])
+                result = usecases.get_rate(from_code=flags["from"], 
+                                           to_code=flags["to"])
             except RateError as e:
                 print(e)
                 continue
@@ -236,7 +239,8 @@ def run() -> None:
             amount = float(flags["amount"])
 
             try:
-                result = usecases.buy_currency(flags["currency"], amount)
+                result = usecases.buy_currency(currency_code=flags["currency"], 
+                                               amount=amount)
             except (LoginError, ValueError, PortfolioError) as e:
                 print(e)
                 continue
@@ -275,7 +279,8 @@ def run() -> None:
             amount = float(flags["amount"])
 
             try:
-                result = usecases.sell_currency(flags["currency"], amount)
+                result = usecases.sell_currency(currency_code=flags["currency"], 
+                                                amount=amount)
             except (
                 LoginError,
                 ValueError, 

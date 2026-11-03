@@ -9,8 +9,9 @@ _DEFAULTS = {
     "rates_ttl_seconds": 300,
     "base_currency": "USD",
     "log_file": "logs/actions.log",
-    "log_format": "...",
     "log_level": "INFO",
+    "log_max_bytes": 1000000,
+    "log_backup_count": 3
 }
 
 class SettingsLoader:
@@ -69,3 +70,10 @@ class SettingsLoader:
         return os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "..")
         )
+    
+    @property
+    def log_file(self) -> str:
+        path = self.get("log_file") or "logs/actions.log"
+        if not os.path.isabs(path):
+            path = os.path.join(self._project_root, path)
+        return os.path.abspath(path)
