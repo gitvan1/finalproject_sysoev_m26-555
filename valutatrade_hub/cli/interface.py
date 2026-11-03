@@ -2,6 +2,7 @@ import shlex
 
 import valutatrade_hub.core.usecases as usecases
 from valutatrade_hub.core.exceptions import (
+    ValutaTradeError,
     ApiRequestError,
     CurrencyNotFoundError,
     InsufficientFundsError,
@@ -9,6 +10,7 @@ from valutatrade_hub.core.exceptions import (
     PortfolioError,
     RateError,
     RegisterError,
+    CurrencyValidationError
 )
 
 
@@ -158,12 +160,12 @@ def run() -> None:
 
             try:
                 view = usecases.get_portfolio_view(base_currency=base)
-            except (LoginError, PortfolioError, RateError) as e:
-                print(e)
-                continue
             except ApiRequestError as e:
                 print(e)
                 print("Повторите попытку позже или проверьте соединение с сетью.")
+                continue
+            except (ValutaTradeError,ValueError, ) as e:
+                print(e)
                 continue
 
             if not view["lines"]:
@@ -201,9 +203,6 @@ def run() -> None:
             try:
                 result = usecases.get_rate(from_code=flags["from"], 
                                            to_code=flags["to"])
-            except RateError as e:
-                print(e)
-                continue
             except ApiRequestError as e:
                 print(e)
                 print("Повторите попытку позже или проверьте соединение с сетью.")
@@ -212,6 +211,9 @@ def run() -> None:
                 print(e)
                 print("Подсказка: get-rate --from <code> --to <code> "
                       "- курс одной валюты к другой.")
+                continue
+            except (ValutaTradeError,ValueError, ) as e:
+                print(e)
                 continue
                 
             print(
@@ -236,17 +238,17 @@ def run() -> None:
                 print("Ошибка: buy --currency <code> --amount <float>")
                 continue
 
-            amount = float(flags["amount"])
+            amount = flags["amount"]
 
             try:
                 result = usecases.buy_currency(currency_code=flags["currency"], 
                                                amount=amount)
-            except (LoginError, ValueError, PortfolioError) as e:
-                print(e)
-                continue
             except ApiRequestError as e:
                 print(e)
                 print("Повторите попытку позже или проверьте соединение с сетью.")
+                continue
+            except (ValutaTradeError,ValueError, ) as e:
+                print(e)
                 continue
 
             code = result["currency_code"]
@@ -276,22 +278,17 @@ def run() -> None:
                 print("Ошибка: sell --currency <code> --amount <float>")
                 continue
 
-            amount = float(flags["amount"])
+            amount = flags["amount"]
 
             try:
                 result = usecases.sell_currency(currency_code=flags["currency"], 
                                                 amount=amount)
-            except (
-                LoginError,
-                ValueError, 
-                PortfolioError, 
-                InsufficientFundsError
-                ) as e:
-                print(e)
-                continue
             except ApiRequestError as e:
                 print(e)
                 print("Повторите попытку позже или проверьте соединение с сетью.")
+                continue
+            except (ValutaTradeError,ValueError, ) as e:
+                print(e)
                 continue
 
             code = result["currency_code"]

@@ -77,3 +77,47 @@ class SettingsLoader:
         if not os.path.isabs(path):
             path = os.path.join(self._project_root, path)
         return os.path.abspath(path)
+
+    @property
+    def project_root(self) -> str:
+        return self._project_root
+
+    @property
+    def data_dir(self) -> str:
+        path = self.get("data_dir")
+        if not isinstance(path, str) or not path:
+            path = "data"
+        if not os.path.isabs(path):
+            path = os.path.join(self._project_root, path)
+        return os.path.abspath(path)
+
+    @property
+    def users_file(self) -> str:
+        return self._resolve(self.get("users_file"), "users.json")
+
+    @property
+    def portfolios_file(self) -> str:
+        return self._resolve(self.get("portfolios_file"), "portfolios.json")
+
+    @property
+    def rates_file(self) -> str:
+        return self._resolve(self.get("rates_file"), "rates.json")
+
+    @property
+    def rates_ttl_seconds(self) -> int:
+        try:
+            return int(self.get("rates_ttl_seconds") or 300)
+        except (TypeError, ValueError):
+            return 300
+
+    @property
+    def base_currency(self) -> str:
+        return str(self.get("base_currency") or "USD").upper()
+
+    def _resolve(self, path: object, default_name: str) -> str:
+        """Собирает абсолютный путь: data_dir/<path> или data_dir/<default_name>."""
+        if not isinstance(path, str) or not path:
+            return os.path.join(self.data_dir, default_name)
+        if not os.path.isabs(path):
+            path = os.path.join(self.data_dir, path)
+        return os.path.abspath(path)

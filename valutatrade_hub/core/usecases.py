@@ -5,9 +5,6 @@ from .constants import (
     CACHE_TTL,
     DEFAULT_RATES,
     META_KEYS,
-    PORTFOLIOS_FILE,
-    RATES_FILE,
-    USERS_FILE,
     BASE_CURRENCY
 )
 from .currencies import get_currency
@@ -19,10 +16,12 @@ from .exceptions import (
     RegisterError,
 )
 from .models import Portfolio, User, Wallet
+from ..infra.database import DatabaseManager
 from ..decorators import log_action
 
 # Текущая сессия
 _current_user: User | None = None
+_db = DatabaseManager()
 
 @log_action("REGISTER")
 def register_user(username: str, password: str) -> User:
@@ -37,7 +36,7 @@ def register_user(username: str, password: str) -> User:
         raise RegisterError("Пароль должен быть не короче 4 символов")
 
     # уникальность
-    users = utils.load_json(USERS_FILE)
+    users = _db.load_users()
     users = users if users else []
     if any(u["username"].lower() == username.lower() for u in users):
         raise RegisterError(f"Имя пользователя '{username}' уже занято")
@@ -51,12 +50,12 @@ def register_user(username: str, password: str) -> User:
 
     # добавление в users.json
     users.append(user.to_dict())
-    utils.save_json(USERS_FILE, users)
+    _db.save_users(users)
 
     # пустой портфель
-    portfolios = utils.load_json(PORTFOLIOS_FILE)
+    portfolios = _db.load_portfolios()
     portfolios.append({"user_id": new_id, "wallets": {}})
-    utils.save_json(PORTFOLIOS_FILE, portfolios)
+    _db.save_portfolios(portfolios)
 
     return user
 
@@ -70,7 +69,7 @@ def login_user(username: str, password: str) -> User:
         raise LoginError("Имя пользователя не может быть пустым")
     username = username.strip()
 
-    users = utils.load_json(USERS_FILE)
+    users = _db.load_users()
     data = None
     for u in users:
         if u["username"].lower() == username.lower():
@@ -98,7 +97,7 @@ def get_current_portfolio() -> Portfolio:
     if user is None:
         raise LoginError("Сначала выполните login")
     
-    portfolios = utils.load_json(PORTFOLIOS_FILE)
+    portfolios = _db.load_portfolios()
 
     data = None
     for p in portfolios:
@@ -153,14 +152,26 @@ def get_portfolio_view(base_currency: str = BASE_CURRENCY) -> dict:
 
 def _save_portfolio(portfolio: Portfolio) -> None:
     """Заменяет/добавляет запись портфеля в portfolios.json."""
-    all_portfolios = utils.load_json(PORTFOLIOS_FILE)
+    all_portfolios = _db.load_portfolios()
     for i, p in enumerate(all_portfolios):
         if p["user_id"] == portfolio.user_id:
             all_portfolios[i] = portfolio.to_dict()
             break
     else:
         all_portfolios.append(portfolio.to_dict())
-    utils.save_json(PORTFOLIOS_FILE, all_portfolios)
+    _db.save_portfolios(all_portfolios)
+
+def _validate_trade(currency_code: str, amount: float) -> tuple[str, float]:
+    """Общая валидация buy/sell."""
+
+    currency = get_currency(currency_code)
+    code = currency.code
+
+    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+        raise ValueError("'amount' должен быть положительным числом")
+    if amount <= 0:
+        raise ValueError("'amount' должен быть положительным числом")
+    return code, float(amount)
 
 @log_action("BUY", verbose=True)
 def buy_currency(currency_code: str, amount: float) -> dict:
@@ -170,17 +181,8 @@ def buy_currency(currency_code: str, amount: float) -> dict:
     if user is None:
         raise LoginError("Сначала выполните login")
 
-    # Валидация currency
-    if not isinstance(currency_code, str) or not currency_code.strip():
-        raise ValueError("'currency' должен быть непустой строкой")
-    code = currency_code.strip().upper()
-
-    # Валидация amount
-    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
-        raise ValueError("'amount' должен быть положительным числом")
-    if amount <= 0:
-        raise ValueError("'amount' должен быть положительным числом")
-    amount = float(amount)
+    # Валидация
+    code, amount = _validate_trade(currency_code, amount)
 
     # Загрузка портфеля
     portfolio = get_current_portfolio()
@@ -221,17 +223,8 @@ def sell_currency(currency_code: str, amount: float) -> dict:
     if user is None:
         raise LoginError("Сначала выполните login")
 
-    # Валидация currency
-    if not isinstance(currency_code, str) or not currency_code.strip():
-        raise ValueError("'currency' должен быть непустой строкой")
-    code = currency_code.strip().upper()
-
-    # Валидация amount
-    if isinstance(amount, bool) or not isinstance(amount, (int, float)):
-        raise ValueError("'amount' должен быть положительным числом")
-    if amount <= 0:
-        raise ValueError("'amount' должен быть положительным числом")
-    amount = float(amount)
+    # Валидация
+    code, amount = _validate_trade(currency_code, amount)
 
     # Портфель
     portfolio = get_current_portfolio()
@@ -294,12 +287,12 @@ def _save_rates(prices: dict[str, dict], source: str = "ParserService") -> dict:
             data[code] = {"rate": float(price["rate"]), "updated_at": now}
     data["source"] = source
     data["last_refresh"] = now
-    utils.save_json(RATES_FILE, data)
+    _db.save_rates(data)
     return data
 
 def _get_rates() -> dict:
     """Получает актуальные курсы"""
-    rates = utils.load_json(RATES_FILE)
+    rates = _db.load_rates()
     if isinstance(rates, dict) and _rates_fresh(rates):
         return rates
     
