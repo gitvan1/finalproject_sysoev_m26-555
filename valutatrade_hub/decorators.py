@@ -1,7 +1,6 @@
 import functools
 import logging
 
-
 logger = logging.getLogger("valutatrade")
 
 def log_action(action: str, verbose: bool = True):

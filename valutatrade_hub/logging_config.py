@@ -4,7 +4,6 @@ import os
 
 from .infra.settings import SettingsLoader
 
-
 _configured = False
 
 def setup_logging() -> None:
@@ -18,7 +17,8 @@ def setup_logging() -> None:
     log_path = settings.log_file
     os.makedirs(os.path.dirname(log_path) or ".", exist_ok=True)
 
-    level = getattr(logging, str(settings.get("log_level") or "INFO").upper(), logging.INFO)
+    level = getattr(logging, str(settings.get("log_level") or "INFO").upper(), 
+                    logging.INFO)
 
     formatter = logging.Formatter(
         "%(asctime)s [%(levelname)s] %(message)s",

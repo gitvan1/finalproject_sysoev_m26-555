@@ -1,12 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
+from ..decorators import log_action
+from ..infra.database import DatabaseManager
 from . import utils
-from .constants import (
-    CACHE_TTL,
-    DEFAULT_RATES,
-    META_KEYS,
-    BASE_CURRENCY
-)
+from .constants import META_KEYS
 from .currencies import get_currency
 from .exceptions import (
     ApiRequestError,
@@ -16,12 +13,12 @@ from .exceptions import (
     RegisterError,
 )
 from .models import Portfolio, User, Wallet
-from ..infra.database import DatabaseManager
-from ..decorators import log_action
+from ..infra.settings import SettingsLoader
 
 # Текущая сессия
 _current_user: User | None = None
 _db = DatabaseManager()
+_settings = SettingsLoader()
 
 @log_action("REGISTER")
 def register_user(username: str, password: str) -> User:
@@ -113,7 +110,7 @@ def get_current_portfolio() -> Portfolio:
     }
     return Portfolio(user_id=user.user_id, wallets=wallets, user=user)
 
-def get_portfolio_view(base_currency: str = BASE_CURRENCY) -> dict:
+def get_portfolio_view(base_currency: str = _settings.base_currency) -> dict:
     """Готовит данные для show-portfolio"""
     portfolio = get_current_portfolio()
     rates = _get_rates()
@@ -189,9 +186,9 @@ def buy_currency(currency_code: str, amount: float) -> dict:
 
     # Курс
     try:
-        rate = get_rate(currency_code, BASE_CURRENCY)["rate"]
+        rate = get_rate(currency_code, _settings.base_currency)["rate"]
     except (RateError):
-        raise PortfolioError(f"Не удалось получить курс для {code}→{BASE_CURRENCY}")
+        raise PortfolioError(f"Не удалось получить курс для {code}→{_settings.base_currency}")
 
     # Изменение портфеля
     wallet = portfolio.get_wallet(code)
@@ -239,9 +236,9 @@ def sell_currency(currency_code: str, amount: float) -> dict:
 
     # Курс
     try:
-        rate = get_rate(currency_code, BASE_CURRENCY)["rate"]
+        rate = get_rate(currency_code, _settings.base_currency)["rate"]
     except (RateError):
-        raise PortfolioError(f"Не удалось получить курс для {code}→{BASE_CURRENCY}")
+        raise PortfolioError(f"Не удалось получить курс для {code}→{_settings.base_currency}")
 
     # Изменение портфеля
     balance_before = wallet.balance
@@ -261,50 +258,62 @@ def sell_currency(currency_code: str, amount: float) -> dict:
         "total_value": amount * rate,
     }
 
-def _rates_fresh(data: dict) -> bool:
-    """Все записи в кеше свежее CACHE_TTL."""
-    rates_data = {k: v for k, v in data.items() if k not in META_KEYS}
+def _rates_fresh(rates_data: dict) -> bool:
+    """Все записи в кеше свежее TTL из SettingsLoader."""
+    rates_data = {k: v for k, v in rates_data.items() if k not in META_KEYS}
     if not rates_data:
         return False
-    now = datetime.now()
+
+    ttl = timedelta(seconds=_settings.rates_ttl_seconds)
+    now = datetime.now(timezone.utc)
+
     for rate in rates_data.values():
-        try:
-            updated = datetime.fromisoformat(rate["updated_at"])
-        except (KeyError, ValueError, TypeError):
+        if not isinstance(rate, dict):
             return False
-        if now - updated > CACHE_TTL:
+        raw = rate.get("updated_at")
+        if not raw:
+            return False
+        try:
+            updated = datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            return False
+        if now - updated > ttl:
             return False
     return True
-
-
-def _save_rates(prices: dict[str, dict], source: str = "ParserService") -> dict:
-    """Обновляет rates.json единой меткой времени, возвращает записанное."""
-    now = datetime.now().isoformat(timespec="seconds")
-
-    data = {}
-    for code, price in prices.items():
-        if code not in META_KEYS:
-            data[code] = {"rate": float(price["rate"]), "updated_at": now}
-    data["source"] = source
-    data["last_refresh"] = now
-    _db.save_rates(data)
-    return data
 
 def _get_rates() -> dict:
     """Получает актуальные курсы"""
     rates = _db.load_rates()
     if isinstance(rates, dict) and _rates_fresh(rates):
         return rates
-    
+
     try:
-        # Позже будет реализован парсер
-        # Сейчас заглушка
-        prices = DEFAULT_RATES
+        _refresh_parser()
     except ApiRequestError:
+        # парсер недоступен: устаревший, но непустой кеш
         if isinstance(rates, dict) and any(k not in META_KEYS for k in rates):
             return rates
         raise
-    return _save_rates(prices)
+
+    return _db.load_rates()
+
+def _refresh_parser() -> None:
+    """Запускает Parser Service."""
+    from ..parser_service.api_clients import (
+        CoinGeckoClient,
+        ExchangeRateApiClient,
+    )
+    from ..parser_service.config import ParserConfig
+    from ..parser_service.storage import Storage
+    from ..parser_service.updater import RatesUpdater
+
+    config = ParserConfig()
+    updater = RatesUpdater(
+        clients=[CoinGeckoClient(config), ExchangeRateApiClient(config)],
+        storage=Storage(config),
+        config=config,
+    )
+    updater.run_update()
 
 @log_action("GET_RATE")
 def get_rate(from_code: str, to_code: str) -> dict:

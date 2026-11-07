@@ -7,7 +7,9 @@ authors = [
     { name = "gitvan", email = "ivan076nt@mail.ru" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "requests>=2.34.2",
+]
 
 [project.scripts]
 valutatrade_hub = "main:main"
